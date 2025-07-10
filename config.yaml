@@ -1,0 +1,41 @@
+# Trading Configuration
+trading:
+  # Strategy Parameters (from btc_charlie original)
+  fast_ema_period: 12  # Fast EMA default
+  slow_ema_period: 25  # Slow EMA default
+  consolidated_ema_period: 25  # Consolidated EMA default
+  
+  # Stochastic RSI Parameters (from original)
+  stoch_rsi_length: 14  # RSI Length
+  stoch_length: 14  # Stochastic Length
+  stoch_k_smooth: 3  # K smoothing
+  stoch_d_smooth: 3  # D smoothing
+  
+  # Stochastic RSI Bands (from original)
+  upper_band: 80
+  middle_band: 50
+  lower_band: 20
+  
+  # Timeframe
+  timeframe: "4h"  # Allowed values: "1m", "5m", "15m", "1h", "4h", "1d"
+
+  # Risk Management (dynamically configurable as requested)
+  max_position_size: 0.02  # 2% of account balance
+  stop_loss_percentage: 0.02  # 2% stop loss (adjustable)
+  take_profit_percentage: 0.04  # 4% take profit (adjustable)
+  max_daily_loss: 0.03  # 3% maximum daily loss
+  max_drawdown: 0.10  # 10% maximum drawdown
+  
+  # Trading Parameters - KORRIGIERT für Kraken
+  trading_pairs:
+    - "BTC/USD"    # Kraken verwendet USD statt USDC
+    - "ETH/USD"    # Kraken verwendet USD statt USDC
+  order_type: "market"  # market or limit
+  one_position_per_pair: true
+  
+  # System Configuration
+  log_level: "INFO"  # DEBUG kann zu viel Output erzeugen
+  data_update_interval: 300  # 5 Minuten für 4h Timeframe (nicht 60 Sekunden)
+
+  max_data_points: 500  # Begrenzt Speichernutzung
+  save_stats_interval: 3600  # Stats alle Stunde speichern
