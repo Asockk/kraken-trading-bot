@@ -102,25 +102,31 @@ class TradingBot:
     def setup_logging(self):
         """Setup comprehensive logging"""
         self.logger = logging.getLogger("trading_bot")
-        self.logger.setLevel(getattr(logging, self.config.log_level))
         
-        # File handler
-        file_handler = logging.FileHandler('logs/trading_bot.log')
-        file_handler.setLevel(logging.INFO)
-        
-        # Console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.INFO)
-        
-        # Formatter
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        file_handler.setFormatter(formatter)
-        console_handler.setFormatter(formatter)
-        
-        self.logger.addHandler(file_handler)
-        self.logger.addHandler(console_handler)
+        # Prüfen ob Handler bereits existieren
+        if not self.logger.handlers:
+            self.logger.setLevel(getattr(logging, self.config.log_level))
+            
+            # File handler
+            file_handler = logging.FileHandler('logs/trading_bot.log')
+            file_handler.setLevel(logging.INFO)
+            
+            # Console handler
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(logging.INFO)
+            
+            # Formatter
+            formatter = logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+            file_handler.setFormatter(formatter)
+            console_handler.setFormatter(formatter)
+            
+            self.logger.addHandler(file_handler)
+            self.logger.addHandler(console_handler)
+            
+        # Propagation verhindern
+        self.logger.propagate = False
     
     async def start(self):
         """Start the trading bot"""
@@ -133,6 +139,11 @@ class TradingBot:
         # Start health check server if enabled
         if self.health_server:
             await self.health_server.start()
+        
+        # Database initialisieren wenn aktiviert
+        if self.database:
+            await self.database.initialize()
+            self.logger.info("Database tables initialized")
         
         # Initialize account balance
         await self._update_account_balance()
