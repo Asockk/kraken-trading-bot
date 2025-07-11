@@ -64,28 +64,23 @@ class ConfigManager:
         self._load_exchange_configs()
     
     def _load_exchange_configs(self):
-        """Load exchange configurations from environment variables"""
+        """Load exchange configurations from environment variables - NUR KRAKEN"""
         # Kraken configuration
         kraken_key = os.getenv('KRAKEN_API_KEY')
         kraken_secret = os.getenv('KRAKEN_API_SECRET')
-        if kraken_key and kraken_secret:
-            self.exchange_configs['kraken'] = ExchangeConfig(
-                name='kraken',
-                api_key=kraken_key,
-                api_secret=kraken_secret,
-                sandbox=os.getenv('KRAKEN_SANDBOX', 'false').lower() == 'true'
+        
+        if not kraken_key or not kraken_secret:
+            raise ValueError(
+                "Kraken API credentials not found! "
+                "Please set KRAKEN_API_KEY and KRAKEN_API_SECRET in .env file"
             )
         
-        # Bybit configuration
-        bybit_key = os.getenv('BYBIT_API_KEY')
-        bybit_secret = os.getenv('BYBIT_API_SECRET')
-        if bybit_key and bybit_secret:
-            self.exchange_configs['bybit'] = ExchangeConfig(
-                name='bybit',
-                api_key=bybit_key,
-                api_secret=bybit_secret,
-                sandbox=os.getenv('BYBIT_SANDBOX', 'false').lower() == 'true'
-            )
+        self.exchange_configs['kraken'] = ExchangeConfig(
+            name='kraken',
+            api_key=kraken_key,
+            api_secret=kraken_secret,
+            sandbox=os.getenv('KRAKEN_SANDBOX', 'false').lower() == 'true'
+        )
     
     def _update_trading_config(self, config_data: Dict[str, Any]):
         """Update trading configuration with data from file"""

@@ -12,6 +12,8 @@ from pathlib import Path
 from config import ConfigManager
 from exchange_api import create_exchange, Position
 from strategy import BTCCharlieStrategy, Signal, StrategySignal
+from health_check import HealthCheckServer
+from database import TradeDatabase
 
 @dataclass
 class BotStats:
@@ -67,8 +69,35 @@ class TradingBot:
         self.last_stats_save = time.time()
         self.stats_save_interval = getattr(self.config, 'save_stats_interval', 3600)
         
+        # Dead Man's Switch
+        self.last_heartbeat = time.time()
+        self.dead_mans_switch_enabled = getattr(
+            self.config, 'enable_dead_mans_switch', False
+        )
+        self.dead_mans_switch_timeout = getattr(
+            self.config, 'dead_mans_switch_timeout', 3600
+        )
+        
+        # Health Check Server
+        self.health_server = None
+        if getattr(self.config, 'enable_health_check', False):
+            self.health_server = HealthCheckServer(
+                self, 
+                getattr(self.config, 'health_check_port', 8080)
+            )
+        
+        # Database (optional)
+        self.database = None
+        if getattr(self.config, 'enable_database', False):
+            db_path = getattr(self.config, 'database_path', 'data/trades.db')
+            self.database = TradeDatabase(db_path)
+            self.logger.info(f"Database initialized at {db_path}")
+        
         self.logger.info(f"Trading bot initialized with {exchange_name} exchange")
         self.logger.info(f"Trading pairs: {self.config.trading_pairs}")
+        self.logger.info(f"Dead Man's Switch: {'ENABLED' if self.dead_mans_switch_enabled else 'DISABLED'}")
+        self.logger.info(f"Health Check: {'ENABLED' if self.health_server else 'DISABLED'}")
+        self.logger.info(f"Database: {'ENABLED' if self.database else 'DISABLED'}")
     
     def setup_logging(self):
         """Setup comprehensive logging"""
@@ -101,6 +130,10 @@ class TradingBot:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
         
+        # Start health check server if enabled
+        if self.health_server:
+            await self.health_server.start()
+        
         # Initialize account balance
         await self._update_account_balance()
         self.initial_balance = self.account_balance
@@ -114,10 +147,34 @@ class TradingBot:
         self.logger.info(f"Received signal {signum}, shutting down...")
         self.is_running = False
     
+    async def _check_dead_mans_switch(self):
+        """Check if bot is still responsive"""
+        if not self.dead_mans_switch_enabled:
+            return
+            
+        time_since_heartbeat = time.time() - self.last_heartbeat
+        
+        if time_since_heartbeat > self.dead_mans_switch_timeout:
+            self.logger.critical(
+                f"Dead man's switch triggered! No activity for {time_since_heartbeat:.0f}s"
+            )
+            self.emergency_stop = True
+            await self._emergency_close_all_positions()
+    
+    def update_heartbeat(self):
+        """Update heartbeat timestamp"""
+        self.last_heartbeat = time.time()
+    
     async def _main_loop(self):
         """Main trading loop"""
         while self.is_running and not self.emergency_stop:
             try:
+                # Update heartbeat at start of each loop
+                self.update_heartbeat()
+                
+                # Check dead man's switch
+                await self._check_dead_mans_switch()
+                
                 # Update market data for all trading pairs
                 await self._update_market_data()
                 
@@ -133,6 +190,10 @@ class TradingBot:
                 
                 # Log statistics
                 self._log_statistics()
+                
+                # Update daily performance in database
+                if self.database:
+                    await self._update_database_performance()
                 
                 # Wait before next iteration
                 await asyncio.sleep(self.config.data_update_interval)
@@ -188,11 +249,13 @@ class TradingBot:
                 self.logger.info(f"Skipping signal for {signal.symbol} - position already exists")
                 return
             
-            # Calculate position size
+            # Calculate position size with min/max limits
             position_size = self._calculate_position_size(signal.price)
             
-            if position_size <= 0:
-                self.logger.warning(f"Position size too small for {signal.symbol}")
+            # Check minimum order size
+            min_order_usd = getattr(self.config, 'min_order_size_usd', 10.0)
+            if position_size * signal.price < min_order_usd:
+                self.logger.warning(f"Position size too small for {signal.symbol}: ${position_size * signal.price:.2f}")
                 return
             
             # Execute order
@@ -221,6 +284,23 @@ class TradingBot:
                 
                 self.stats.trades_executed += 1
                 
+                # Log to database
+                if self.database:
+                    await self.database.log_trade(
+                        order_id=order_result.order_id,
+                        symbol=signal.symbol,
+                        side=signal.signal.value,
+                        amount=position_size,
+                        price=signal.price,
+                        fee=self._calculate_fee(position_size * signal.price),
+                        strategy_signal={
+                            'type': signal.signal_type,
+                            'confidence': signal.confidence,
+                            'stop_loss': signal.stop_loss,
+                            'take_profit': signal.take_profit
+                        }
+                    )
+                
             else:
                 self.logger.error(f"Order execution failed: {order_result.error_message}")
     
@@ -232,10 +312,29 @@ class TradingBot:
         # Calculate maximum position value
         max_position_value = self.account_balance * self.config.max_position_size
         
+        # Apply max order size limit
+        max_order_usd = getattr(self.config, 'max_order_size_usd', 10000.0)
+        max_position_value = min(max_position_value, max_order_usd)
+        
         # Calculate position size
         position_size = max_position_value / price
         
+        # Apply symbol-specific minimums (hardcoded for now, should be from config)
+        if 'BTC' in price:
+            position_size = max(position_size, 0.0001)  # Min BTC
+        elif 'ETH' in price:
+            position_size = max(position_size, 0.005)   # Min ETH
+        
         return position_size
+    
+    def _calculate_fee(self, order_value: float) -> float:
+        """Calculate trading fee"""
+        if self.config.order_type == "market":
+            fee_rate = getattr(self.config, 'taker_fee', 0.0026)
+        else:
+            fee_rate = getattr(self.config, 'maker_fee', 0.0016)
+        
+        return order_value * fee_rate
     
     async def _update_account_balance(self):
         """Update account balance - nur USD verwenden"""
@@ -326,6 +425,19 @@ class TradingBot:
         except Exception as e:
             self.logger.error(f"Error during emergency close: {e}")
     
+    async def _update_database_performance(self):
+        """Update daily performance in database"""
+        if not self.database:
+            return
+            
+        try:
+            metrics = await self.database.calculate_performance_metrics()
+            # Log daily performance
+            # This would be expanded with actual daily tracking
+            self.logger.debug(f"Performance metrics: {metrics}")
+        except Exception as e:
+            self.logger.error(f"Error updating database performance: {e}")
+    
     def _log_statistics(self):
         """Log current statistics"""
         win_rate = (self.stats.winning_trades / max(self.stats.trades_executed, 1)) * 100
@@ -351,6 +463,9 @@ class TradingBot:
         
         # Final statistics
         self._log_final_statistics()
+        
+        # Save final stats
+        self.save_stats()
         
         self.logger.info("Trading bot shutdown complete")
     
@@ -401,7 +516,7 @@ class TradingBot:
                 json.dump(stats_data, f, indent=2)
                 
         except Exception as e:
-            self.logger.error(f"Error saving stats: {e}") 
+            self.logger.error(f"Error saving stats: {e}")
 
 async def main():
     """Main entry point"""

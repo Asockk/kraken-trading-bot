@@ -68,7 +68,8 @@ async def run_bot():
     
     try:
         # Import after environment is set up
-        from src.bot import TradingBot
+        sys.path.append(str(Path(__file__).parent / "src"))
+        from bot import TradingBot
         
         logger.info("Starte Trading Bot...")
         bot = TradingBot("config.yaml")

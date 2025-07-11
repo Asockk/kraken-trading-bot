@@ -11,31 +11,95 @@ trading:
   stoch_k_smooth: 3  # K smoothing
   stoch_d_smooth: 3  # D smoothing
   
-  # Stochastic RSI Bands (from original)
+  # Stochastic RSI Bands
   upper_band: 80
   middle_band: 50
   lower_band: 20
   
   # Timeframe
-  timeframe: "4h"  # Allowed values: "1m", "5m", "15m", "1h", "4h", "1d"
+  timeframe: "4h" # Allowed values: "1m", "5m", "15m", "1h", "4h", "1d"
 
   # Risk Management (dynamically configurable as requested)
   max_position_size: 0.02  # 2% of account balance
   stop_loss_percentage: 0.02  # 2% stop loss (adjustable)
   take_profit_percentage: 0.04  # 4% take profit (adjustable)
   max_daily_loss: 0.03  # 3% maximum daily loss
-  max_drawdown: 0.10  # 10% maximum drawdown
+  max_drawdown: 0.10  # 10%
   
-  # Trading Parameters - KORRIGIERT für Kraken
+  # Order Limits
+  min_order_size_usd: 10.0  # Minimum Order in USD
+  max_order_size_usd: 10000.0  # Maximum Order in USD
+  
+  # Trading Parameters - NUR Kraken
   trading_pairs:
-    - "BTC/USD"    # Kraken verwendet USD statt USDC
-    - "ETH/USD"    # Kraken verwendet USD statt USDC
-  order_type: "market"  # market or limit
+    - "BTC/USD"
+    - "ETH/USD"
+    
+  order_type: "market"
   one_position_per_pair: true
   
+  # Gebühren und Slippage
+  maker_fee: 0.0016  # 0.16% Kraken Maker Fee
+  taker_fee: 0.0026  # 0.26% Kraken Taker Fee
+  slippage_tolerance: 0.005  # 0.5% Slippage
+  
   # System Configuration
-  log_level: "INFO"  # DEBUG kann zu viel Output erzeugen
-  data_update_interval: 300  # 5 Minuten für 4h Timeframe (nicht 60 Sekunden)
-
+  log_level: "INFO"
+  data_update_interval: 1800  # 30 Minuten für 4h Timeframe
+  
+  # API Rate Limiting
+  min_request_interval: 0.5  # Sekunden zwischen Requests
+  rate_limit_per_minute: 60  # Max Requests pro Minute
+  lockout_time_auth_error: 900  # 15 Minuten bei Auth-Fehler
+  lockout_time_rate_limit: 300  # 5 Minuten bei Rate-Limit
+  
+  # Data Management
   max_data_points: 500  # Begrenzt Speichernutzung
   save_stats_interval: 3600  # Stats alle Stunde speichern
+  
+  # Safety Features
+  enable_dead_mans_switch: true
+  dead_mans_switch_timeout: 3600  # 1 Stunde
+  
+  # Monitoring
+  enable_health_check: true
+  health_check_port: 8080
+
+  # Database
+  enable_database: true
+  database_path: "data/trades.db"
+  
+# Kraken Exchange Specific Settings
+kraken:
+  # Kraken spezifische Limits
+  min_btc_order: 0.0001  # Minimum BTC Order
+  min_eth_order: 0.005   # Minimum ETH Order
+  
+  # Nonce Window (falls Probleme mit Nonce)
+  nonce_window: 10  # Sekunden
+  
+# Notification Settings (optional)
+notifications:
+  telegram:
+    enabled: false
+    bot_token: ""
+    chat_id: ""
+  
+  discord:
+    enabled: false
+    webhook_url: ""
+    
+  email:
+    enabled: false
+    smtp_server: ""
+    smtp_port: 587
+    username: ""
+    password: ""
+    recipient: ""
+
+# Advanced Features (für Zukunft)
+advanced:
+  enable_backtesting: false
+  enable_paper_trading: false
+  enable_websocket: false  # Für Real-time Updates
+  enable_database: false   # SQLite für Trade History
